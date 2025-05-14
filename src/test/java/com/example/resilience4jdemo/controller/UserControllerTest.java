@@ -31,14 +31,19 @@ class UserControllerTest {
     void getUserData_ShouldReturnUserData() throws Exception {
         // Given
         String userId = "123";
-        UserData userData = new UserData(userId, "User " + userId);
+        UserData userData = UserData.builder()
+            .userId(userId)
+            .username("User " + userId)
+            .email(null)
+            .status(null)
+            .build();
         when(externalService.getUserData(userId)).thenReturn(userData);
 
         // When/Then
         mockMvc.perform(get("/api/users/{userId}", userId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(userId))
-                .andExpect(jsonPath("$.name").value("User " + userId));
+                .andExpect(jsonPath("$.username").value("User " + userId));
     }
 
     @Test
@@ -50,7 +55,7 @@ class UserControllerTest {
 
         // When/Then
         mockMvc.perform(post("/api/users/process")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(MediaType.TEXT_PLAIN)
                 .content(data))
                 .andExpect(status().isOk())
                 .andExpect(content().string(processedData));
@@ -60,7 +65,7 @@ class UserControllerTest {
     void failEndpoint_ShouldReturnServerError() throws Exception {
         // Given
         when(externalService.getUserData("fail"))
-            .thenThrow(new RuntimeException("Service error"));
+            .thenThrow(new com.example.resilience4jdemo.exception.ServiceException("Service unavailable", "SERVICE_UNAVAILABLE"));
 
         // When/Then
         mockMvc.perform(get("/api/users/fail"))

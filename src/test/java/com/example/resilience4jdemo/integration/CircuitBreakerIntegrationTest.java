@@ -20,12 +20,12 @@ import static org.junit.jupiter.api.Assertions.*;
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @TestPropertySource(properties = {
     "resilience4j.circuitbreaker.instances.userService.failure-rate-threshold=50",
-    "resilience4j.circuitbreaker.instances.userService.wait-duration-in-open-state=1s",
-    "resilience4j.circuitbreaker.instances.userService.sliding-window-size=4",
-    "resilience4j.circuitbreaker.instances.userService.minimum-number-of-calls=4",
+    "resilience4j.circuitbreaker.instances.userService.wait-duration-in-open-state=5s",
+    "resilience4j.circuitbreaker.instances.userService.sliding-window-size=10",
+    "resilience4j.circuitbreaker.instances.userService.minimum-number-of-calls=5",
     "resilience4j.circuitbreaker.instances.userService.sliding-window-type=count_based",
     "resilience4j.circuitbreaker.instances.userService.automatic-transition-from-open-to-half-open-enabled=true",
-    "resilience4j.circuitbreaker.instances.userService.record-exceptions=java.lang.RuntimeException"
+    "resilience4j.circuitbreaker.instances.userService.record-exceptions=com.example.resilience4jdemo.exception.ServiceException"
 })
 class CircuitBreakerIntegrationTest {
 
@@ -63,42 +63,43 @@ class CircuitBreakerIntegrationTest {
     }
 
     @Test
-    void whenFailedCall_thenCircuitBreakerOpens() {
+    void whenFailedCall_thenCircuitBreakerTriggersFallback() {
         // Given
         assertEquals(CircuitBreaker.State.CLOSED, circuitBreaker.getState());
 
         // When - Make multiple failed calls
-        for (int i = 0; i < 4; i++) {
-            ResponseEntity<String> response = restTemplate.getForEntity(
+        ResponseEntity<UserData> lastResponse = null;
+        for (int i = 0; i < 10; i++) {
+            lastResponse = restTemplate.getForEntity(
                 "http://localhost:" + port + "/api/users/fail",
-                String.class
+                UserData.class
             );
-            assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
         }
 
-        // Then
-        assertEquals(CircuitBreaker.State.OPEN, circuitBreaker.getState());
+        // Then: After enough failures, fallback should be triggered (status 503)
+        assertNotNull(lastResponse);
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, lastResponse.getStatusCode());
     }
 
     @Test
     void whenCircuitBreakerOpen_thenCallsReturnServiceUnavailable() {
-        // Given
-        // Make circuit breaker open
-        for (int i = 0; i < 4; i++) {
-            restTemplate.getForEntity(
+        // Given: Open the circuit breaker by making enough failed calls
+        for (int i = 0; i < 10; i++) {
+            ResponseEntity<UserData> response = restTemplate.getForEntity(
                 "http://localhost:" + port + "/api/users/fail",
-                String.class
+                UserData.class
             );
+            assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
         }
+
+        // Then: Circuit breaker should be open
         assertEquals(CircuitBreaker.State.OPEN, circuitBreaker.getState());
 
-        // When
-        ResponseEntity<String> response = restTemplate.getForEntity(
+        // When: Call again, should get fallback (503)
+        ResponseEntity<UserData> response = restTemplate.getForEntity(
             "http://localhost:" + port + "/api/users/fail",
-            String.class
+            UserData.class
         );
-
-        // Then
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
     }
 } 

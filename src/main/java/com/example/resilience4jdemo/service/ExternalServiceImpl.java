@@ -1,51 +1,60 @@
 package com.example.resilience4jdemo.service;
 
+import com.example.resilience4jdemo.exception.ServiceException;
 import com.example.resilience4jdemo.model.UserData;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import com.example.resilience4jdemo.util.RandomProvider;
 
-import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
 public class ExternalServiceImpl implements ExternalService {
 
-    @Autowired
-    private Random random;
+    private static final String USER_SERVICE = "userService";
+    private static final String PROCESS_SERVICE = "processService";
+    private static final String ERROR_USER_NOT_FOUND = "USER_NOT_FOUND";
+    private static final String ERROR_RATE_LIMIT = "RATE_LIMIT_EXCEEDED";
+
+    private final RandomProvider randomProvider;
+
+    public ExternalServiceImpl(RandomProvider randomProvider) {
+        this.randomProvider = randomProvider;
+    }
 
     @Override
-    @CircuitBreaker(name = "userService", fallbackMethod = "getUserDataFallback")
+    @CircuitBreaker(name = USER_SERVICE, fallbackMethod = "getUserDataFallback")
     public UserData getUserData(String userId) {
         log.info("Fetching user data for userId: {}", userId);
         
         if ("fail".equals(userId)) {
-            throw new RuntimeException("External service error");
+            throw new ServiceException("External service error", "SERVICE_UNAVAILABLE");
         }
         
-        // Simulate external service call
-        try {
-            Thread.sleep(100);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        
-        return new UserData(userId, "User " + userId);
+        return UserData.builder()
+                .userId(userId)
+                .username("User " + userId)
+                .status("ACTIVE")
+                .build();
     }
 
     public UserData getUserDataFallback(String userId, Throwable t) {
-        log.warn("Fallback triggered for userId: {} due to: {}", userId, t.toString());
-        return null;
+        log.warn("Fallback triggered for userId: {} due to: {}", userId, t.getMessage());
+        throw new ServiceException("Service unavailable", "SERVICE_UNAVAILABLE");
     }
 
     @Override
-    @CircuitBreaker(name = "processService")
+    @CircuitBreaker(name = PROCESS_SERVICE)
+    @RateLimiter(name = PROCESS_SERVICE)
     public String processData(String data) {
         log.info("Processing data: {}", data);
         
-        if (random.nextDouble() < 0.3) {
-            throw new RuntimeException("Rate limit exceeded");
+        if (randomProvider.nextDouble() < 0.3) {
+            throw new ServiceException("Rate limit exceeded", ERROR_RATE_LIMIT);
         }
         
         return "Processed: " + data;

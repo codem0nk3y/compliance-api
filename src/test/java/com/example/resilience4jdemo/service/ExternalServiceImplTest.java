@@ -1,6 +1,7 @@
 package com.example.resilience4jdemo.service;
 
 import com.example.resilience4jdemo.model.UserData;
+import com.example.resilience4jdemo.util.RandomProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,7 +18,7 @@ import static org.mockito.Mockito.*;
 class ExternalServiceImplTest {
 
     @Mock
-    private Random random;
+    private RandomProvider randomProvider;
 
     @InjectMocks
     private ExternalServiceImpl externalService;
@@ -25,7 +26,7 @@ class ExternalServiceImplTest {
     @BeforeEach
     void setUp() {
         // Reset mocks
-        reset(random);
+        reset(randomProvider);
     }
 
     @Test
@@ -39,7 +40,7 @@ class ExternalServiceImplTest {
         // Then
         assertNotNull(result);
         assertEquals(userId, result.getUserId());
-        assertEquals("User " + userId, result.getName());
+        assertEquals("User " + userId, result.getUsername());
     }
 
     @Test
@@ -55,24 +56,24 @@ class ExternalServiceImplTest {
     void processData_ShouldReturnProcessedData() {
         // Given
         String data = "test data";
-        when(random.nextDouble()).thenReturn(0.4); // Above threshold
+        when(randomProvider.nextDouble()).thenReturn(0.4); // Above threshold
 
         // When
         String result = externalService.processData(data);
 
         // Then
         assertEquals("Processed: " + data, result);
-        verify(random).nextDouble();
+        verify(randomProvider).nextDouble();
     }
 
     @Test
     void processData_ShouldThrowExceptionOnRateLimit() {
         // Given
         String data = "test data";
-        when(random.nextDouble()).thenReturn(0.2); // Below threshold
+        when(randomProvider.nextDouble()).thenReturn(0.2); // Below threshold
 
         // When & Then
         assertThrows(RuntimeException.class, () -> externalService.processData(data));
-        verify(random).nextDouble();
+        verify(randomProvider).nextDouble();
     }
 } 
